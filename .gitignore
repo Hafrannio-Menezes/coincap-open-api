@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+.codex
+coincap_home.html
+chunk_markets.js
+chunks
