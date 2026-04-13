@@ -32,7 +32,8 @@ const assetParamsSchema = z.object({
 
 export async function buildServer() {
   const app = Fastify({
-    logger: env.NODE_ENV !== "test"
+    logger: env.NODE_ENV !== "test",
+    trustProxy: env.TRUST_PROXY
   });
 
   await app.register(cors, { origin: true });
@@ -418,11 +419,13 @@ export async function buildServer() {
 
       const overview = await service.getOverview();
       const declaredAssets = Number.parseInt(overview.market.assets, 10);
-      const totalLimit = Number.isFinite(declaredAssets) && declaredAssets > 0 ? declaredAssets + 50 : 2500;
+      const desiredLimit = Number.isFinite(declaredAssets) && declaredAssets > 0 ? declaredAssets + 50 : 1200;
+      const totalLimit = Math.min(env.ALL_ASSETS_MAX_LIMIT, Math.max(1, desiredLimit));
 
       return service.getAssets({
         direction: parsed.data.direction,
         limit: totalLimit,
+        scanLimit: totalLimit,
         search: parsed.data.search,
         sort: parsed.data.sort
       });

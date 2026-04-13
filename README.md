@@ -32,6 +32,13 @@ npm run dev
 
 Servidor local padrão: `http://localhost:3000`
 
+## Variáveis de ambiente
+
+- `TRUST_PROXY` (`true/false`) - habilita leitura correta do IP real atrás de proxy/CDN.
+- `CACHE_MAX_ENTRIES` - limite de chaves no cache em memória (LRU).
+- `ALL_ASSETS_MAX_LIMIT` - teto interno para a rota `/api/v1/assets/all`.
+- `SEARCH_SCAN_LIMIT` - varredura máxima de busca para a rota paginada `/api/v1/assets`.
+
 ## Endpoints
 
 ### `GET /health`

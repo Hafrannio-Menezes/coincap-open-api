@@ -159,6 +159,7 @@ type RequestOptions = {
 type GetAssetsInput = {
   direction: SortDirection;
   limit: number;
+  scanLimit?: number;
   search?: string;
   sort: SortField;
 };
@@ -221,7 +222,10 @@ function compareAssets(a: AssetDTO, b: AssetDTO, sort: SortField, direction: Sor
 }
 
 export class CoincapService {
-  private readonly cache = new TtlCache<string, unknown>();
+  private readonly cache = new TtlCache<string, unknown>({
+    maxEntries: env.CACHE_MAX_ENTRIES
+  });
+  private readonly inFlight = new Map<string, Promise<unknown>>();
 
   async getOverview(ttlMs = env.CACHE_TTL_MS): Promise<OverviewResponse> {
     return this.cachedRequest(
@@ -268,9 +272,14 @@ export class CoincapService {
     return this.cachedRequest(
       { cacheKey, ttlMs },
       async () => {
-        const scanLimit = normalizedSearch
+        const computedSearchScanLimit = normalizedSearch
           ? Math.min(env.SEARCH_SCAN_LIMIT, Math.max(250, input.limit * 6))
           : input.limit;
+        const requestedScanLimit = input.scanLimit ?? computedSearchScanLimit;
+        const scanLimit = Math.min(
+          env.ALL_ASSETS_MAX_LIMIT,
+          Math.max(input.limit, Math.floor(requestedScanLimit))
+        );
 
         const data = await this.graphqlRequest<AssetsGraphqlData>(GET_ASSETS_QUERY, {
           direction: input.direction,
@@ -329,9 +338,24 @@ export class CoincapService {
       return existing as T;
     }
 
-    const fresh = await resolver();
-    this.cache.set(options.cacheKey, fresh, options.ttlMs);
-    return fresh;
+    const inFlight = this.inFlight.get(options.cacheKey);
+    if (inFlight) {
+      return inFlight as Promise<T>;
+    }
+
+    const pending = (async () => {
+      const fresh = await resolver();
+      this.cache.set(options.cacheKey, fresh, options.ttlMs);
+      return fresh;
+    })();
+
+    this.inFlight.set(options.cacheKey, pending);
+
+    try {
+      return (await pending) as T;
+    } finally {
+      this.inFlight.delete(options.cacheKey);
+    }
   }
 
   private async graphqlRequest<TData>(query: string, variables?: Record<string, unknown>): Promise<TData> {
